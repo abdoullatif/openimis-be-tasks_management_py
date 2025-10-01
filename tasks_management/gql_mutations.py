@@ -190,3 +190,32 @@ class ResolveTaskMutation(BaseHistoryModelUpdateMutationMixin, BaseMutation):
 
     class Input(ResolveTaskGroupInput):
         pass
+
+
+class DeleteTaskMutation(BaseHistoryModelDeleteMutationMixin, BaseMutation):
+    _mutation_class = "DeleteTaskMutation"
+    _mutation_module = "tasks_management"
+    _model = Task
+
+    @classmethod
+    def _validate_mutation(cls, user, **data):
+        if type(user) is AnonymousUser or not user.has_perms(
+                TasksManagementConfig.gql_task_delete_perms):
+            raise ValidationError("mutation.authentication_required")
+
+    @classmethod
+    def _mutate(cls, user, **data):
+        if "client_mutation_id" in data:
+            data.pop('client_mutation_id')
+        if "client_mutation_label" in data:
+            data.pop('client_mutation_label')
+
+        service = TaskService(user)
+        ids = data.get('ids')
+        if ids:
+            with transaction.atomic():
+                for id in ids:
+                    service.delete({'id': id, 'user': user})
+
+    class Input(OpenIMISMutation.Input):
+        ids = graphene.List(graphene.UUID, required=True)

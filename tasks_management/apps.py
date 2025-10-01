@@ -38,6 +38,7 @@ class TasksManagementConfig(AppConfig):
 
         cfg = ModuleConfiguration.get_or_default(self.name, DEFAULT_CONFIG)
         self.__load_config(cfg)
+        
 
     @classmethod
     def __load_config(cls, cfg):

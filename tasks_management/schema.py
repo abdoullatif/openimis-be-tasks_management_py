@@ -9,8 +9,8 @@ from core.schema import OrderedDjangoFilterConnectionField
 from core.services import wait_for_mutation
 from core.utils import append_validity_filter
 from tasks_management.gql_mutations import CreateTaskGroupMutation, UpdateTaskGroupMutation, DeleteTaskGroupMutation, \
-    UpdateTaskMutation, ResolveTaskMutation
-from tasks_management.gql_queries import TaskGroupGQLType, TaskExecutorGQLType, TaskGQLType, TaskHistoryGQLType
+    UpdateTaskMutation, ResolveTaskMutation, DeleteTaskMutation
+from tasks_management.gql_queries import TaskGroupGQLType, TaskExecutorGQLType, TaskGQLType, TaskHistoryGQLType, TaskListGQLType
 from tasks_management.models import TaskGroup, TaskExecutor, Task
 from tasks_management.apps import TasksManagementConfig
 
@@ -46,6 +46,17 @@ class Query(graphene.ObjectType):
         entityIds=graphene.List(graphene.UUID),
         entityString__Icontains=graphene.String(),
     )
+    task_list = OrderedDjangoFilterConnectionField(
+        TaskListGQLType,
+        orderBy=graphene.List(of_type=graphene.String),
+        applyDefaultValidityFilter=graphene.Boolean(),
+        client_mutation_id=graphene.String(),
+        groupId=graphene.String(),
+        customFilters=graphene.List(of_type=graphene.String),
+        taskGroupId=graphene.String(),
+        entityIds=graphene.List(graphene.UUID),
+        entityString__Icontains=graphene.String(),
+    )
     task_history = OrderedDjangoFilterConnectionField(
         TaskHistoryGQLType,
         orderBy=graphene.List(of_type=graphene.String),
@@ -60,6 +71,33 @@ class Query(graphene.ObjectType):
 
     def resolve_task(self, info, **kwargs):
         filters = append_validity_filter(**kwargs)
+
+        client_mutation_id = kwargs.get("client_mutation_id")
+        if client_mutation_id:
+            wait_for_mutation(client_mutation_id)
+            filters.append(Q(mutations__mutation__client_mutation_id=client_mutation_id))
+
+        taskGroupId = kwargs.get("taskGroupId")
+        if taskGroupId:
+            filters.append(Q(task_group__id=taskGroupId))
+
+        entityIds = kwargs.get("entityIds")
+        if entityIds:
+            filters.append(Q(entity_id__in=entityIds))
+
+        # not checking perms because get_queryset filters tasks assigned to user
+        query = Task.objects.filter(*filters)
+
+        entity_string = kwargs.get("entityString__Icontains")
+        if entity_string:
+            task_ids = [task.id for task in query if entity_string.lower() in str(task.entity).lower()]
+            query = query.filter(id__in=task_ids)
+
+        return gql_optimizer.query(query, info)
+
+    def resolve_task_list(self, info, **kwargs):
+        """Resolver pour la liste des tâches avec executorsStatus"""
+        filters = []  # Task n'a pas de champs de validité, pas d'append_validity_filter
 
         client_mutation_id = kwargs.get("client_mutation_id")
         if client_mutation_id:
@@ -158,3 +196,4 @@ class Mutation(graphene.ObjectType):
 
     update_task = UpdateTaskMutation.Field()
     resolve_task = ResolveTaskMutation.Field()
+    delete_task = DeleteTaskMutation.Field()
