@@ -35,9 +35,13 @@ class TasksManagementConfig(AppConfig):
 
     def ready(self):
         from core.models import ModuleConfiguration
+        from tasks_management.signals import bind_service_signals
 
         cfg = ModuleConfiguration.get_or_default(self.name, DEFAULT_CONFIG)
         self.__load_config(cfg)
+        
+        # Bind service signals
+        bind_service_signals()
         
 
     @classmethod

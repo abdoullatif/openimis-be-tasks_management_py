@@ -147,10 +147,7 @@ class TaskGroupService(BaseService):
                 task_group = TaskGroup.objects.get(id=task_group_id)
                 json_ext = task_group.json_ext if task_group.json_ext else dict()
                 obj_data = {**obj_data, "json_ext": {**json_ext, "task_sources": list(task_sources)}}
-                current_task_executors = task_group.taskexecutor_set.filter(is_deleted=False)
-                current_user_ids = current_task_executors.values_list('user__id', flat=True)
-                if set(current_user_ids) != set(user_ids):
-                    self._update_task_group_task_executors(task_group, user_ids)
+                self._update_task_group_task_executors(task_group, user_ids)
                 return super().update(obj_data)
         except Exception as exc:
             import traceback
