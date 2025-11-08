@@ -1,5 +1,6 @@
 import importlib
 import copy
+import logging
 
 import graphene
 from django.db.models import Q
@@ -9,6 +10,8 @@ from core import ExtendedConnection, prefix_filterset
 from core.gql_queries import UserGQLType
 from tasks_management.apps import TasksManagementConfig
 from tasks_management.models import TaskGroup, TaskExecutor, Task
+
+logger = logging.getLogger(__name__)
 
 DICT_STRING = "{}"
 
@@ -71,35 +74,47 @@ class TaskListGQLType(DjangoObjectType):
         connection_class = ExtendedConnection
 
     def resolve_business_data(self, info):
-        data = self.data
-        serializer_path = self.business_data_serializer
-        serialized_data = copy.deepcopy(data)
-        if serializer_path:
-            module_path, class_name, method_name = serializer_path.rsplit('.', 2)
+        try:
+            data = self.data or {}
+            serializer_path = self.business_data_serializer
+            serialized_data = copy.deepcopy(data)
+            if serializer_path:
+                try:
+                    module_path, class_name, method_name = serializer_path.rsplit('.', 2)
+                    service_module = importlib.import_module(module_path)
 
-            try:
-                service_module = importlib.import_module(module_path)
+                    if hasattr(service_module, class_name):
+                        service_class = getattr(service_module, class_name)
+                        instance = service_class(info.context.user)
 
-                if hasattr(service_module, class_name):
-                    service_class = getattr(service_module, class_name)
-                    instance = service_class(info.context.user)
+                        serializer_method = getattr(instance, method_name, None)
 
-                    serializer_method = getattr(instance, method_name, None)
+                        if callable(serializer_method):
+                            serialized_data = serializer_method(serialized_data)
+                except (ImportError, AttributeError, ValueError) as e:
+                    # Si le serializer n'existe pas ou ne peut pas être chargé, retourner les données brutes
+                    logger.warning(f"Could not load business_data_serializer '{serializer_path}': {e}")
+                    return serialized_data
+                except Exception as e:
+                    logger.error(f"Error in business_data_serializer '{serializer_path}': {e}", exc_info=True)
+                    return serialized_data
 
-                    if callable(serializer_method):
-                        serialized_data = serializer_method(serialized_data)
-
-            except ImportError:
-                return f"Error: Module '{module_path}' not found."
-            except AttributeError:
-                return f"Error: Attribute not found in the module or class."
-            except Exception as e:
-                return f"Error: {str(e)}"
-
-        return serialized_data
+            return serialized_data
+        except Exception as e:
+            logger.error(f"Error resolving business_data for task {self.id}: {e}", exc_info=True)
+            return self.data or {}
 
     def resolve_entity_string(self, info):
-        return self.entity.__str__()
+        try:
+            if self.entity:
+                return str(self.entity)
+            # Fallback si entity n'existe pas encore (ex: tâche créée avant l'objet)
+            if self.source and self.business_event:
+                return f"{self.source} - {self.business_event}"
+            return str(self.source) if self.source else "N/A"
+        except Exception:
+            # Fallback en cas d'erreur
+            return str(self.source) if self.source else "N/A"
 
     def resolve_executors_status(self, info):
         """
@@ -226,6 +241,8 @@ class TaskGQLType(DjangoObjectType):
     uuid = graphene.String(source='uuid')
     business_data = graphene.JSONString()
     entity_string = graphene.String()
+    entity_id = graphene.String()
+    entity_type_id = graphene.Int()
 
     class Meta:
         model = Task
@@ -247,36 +264,54 @@ class TaskGQLType(DjangoObjectType):
         }
         connection_class = ExtendedConnection
 
+    def resolve_entity_id(self, info):
+        return self.entity_id or None
+
+    def resolve_entity_type_id(self, info):
+        return self.entity_type_id if self.entity_type else None
+
     def resolve_business_data(self, info):
-        data = self.data
-        serializer_path = self.business_data_serializer
-        serialized_data = copy.deepcopy(data)
-        if serializer_path:
-            module_path, class_name, method_name = serializer_path.rsplit('.', 2)
+        try:
+            data = self.data or {}
+            serializer_path = self.business_data_serializer
+            serialized_data = copy.deepcopy(data)
+            if serializer_path:
+                try:
+                    module_path, class_name, method_name = serializer_path.rsplit('.', 2)
+                    service_module = importlib.import_module(module_path)
 
-            try:
-                service_module = importlib.import_module(module_path)
+                    if hasattr(service_module, class_name):
+                        service_class = getattr(service_module, class_name)
+                        instance = service_class(info.context.user)
 
-                if hasattr(service_module, class_name):
-                    service_class = getattr(service_module, class_name)
-                    instance = service_class(info.context.user)
+                        serializer_method = getattr(instance, method_name, None)
 
-                    serializer_method = getattr(instance, method_name, None)
+                        if callable(serializer_method):
+                            serialized_data = serializer_method(serialized_data)
+                except (ImportError, AttributeError, ValueError) as e:
+                    # Si le serializer n'existe pas ou ne peut pas être chargé, retourner les données brutes
+                    logger.warning(f"Could not load business_data_serializer '{serializer_path}': {e}")
+                    return serialized_data
+                except Exception as e:
+                    logger.error(f"Error in business_data_serializer '{serializer_path}': {e}", exc_info=True)
+                    return serialized_data
 
-                    if callable(serializer_method):
-                        serialized_data = serializer_method(serialized_data)
-
-            except ImportError:
-                return f"Error: Module '{module_path}' not found."
-            except AttributeError:
-                return f"Error: Attribute not found in the module or class."
-            except Exception as e:
-                return f"Error: {str(e)}"
-
-        return serialized_data
+            return serialized_data
+        except Exception as e:
+            logger.error(f"Error resolving business_data for task {self.id}: {e}", exc_info=True)
+            return self.data or {}
 
     def resolve_entity_string(self, info):
-        return self.entity.__str__()
+        try:
+            if self.entity:
+                return str(self.entity)
+            # Fallback si entity n'existe pas encore (ex: tâche créée avant l'objet)
+            if self.source and self.business_event:
+                return f"{self.source} - {self.business_event}"
+            return str(self.source) if self.source else "N/A"
+        except Exception:
+            # Fallback en cas d'erreur
+            return str(self.source) if self.source else "N/A"
 
     @classmethod
     def get_queryset(cls, queryset, info):
@@ -315,35 +350,47 @@ class TaskHistoryGQLType(DjangoObjectType):
         connection_class = ExtendedConnection
 
     def resolve_business_data(self, info):
-        data = self.data
-        serializer_path = self.business_data_serializer
-        serialized_data = copy.deepcopy(data)
-        if serializer_path:
-            module_path, class_name, method_name = serializer_path.rsplit('.', 2)
+        try:
+            data = self.data or {}
+            serializer_path = self.business_data_serializer
+            serialized_data = copy.deepcopy(data)
+            if serializer_path:
+                try:
+                    module_path, class_name, method_name = serializer_path.rsplit('.', 2)
+                    service_module = importlib.import_module(module_path)
 
-            try:
-                service_module = importlib.import_module(module_path)
+                    if hasattr(service_module, class_name):
+                        service_class = getattr(service_module, class_name)
+                        instance = service_class(info.context.user)
 
-                if hasattr(service_module, class_name):
-                    service_class = getattr(service_module, class_name)
-                    instance = service_class(info.context.user)
+                        serializer_method = getattr(instance, method_name, None)
 
-                    serializer_method = getattr(instance, method_name, None)
+                        if callable(serializer_method):
+                            serialized_data = serializer_method(serialized_data)
+                except (ImportError, AttributeError, ValueError) as e:
+                    # Si le serializer n'existe pas ou ne peut pas être chargé, retourner les données brutes
+                    logger.warning(f"Could not load business_data_serializer '{serializer_path}': {e}")
+                    return serialized_data
+                except Exception as e:
+                    logger.error(f"Error in business_data_serializer '{serializer_path}': {e}", exc_info=True)
+                    return serialized_data
 
-                    if callable(serializer_method):
-                        serialized_data = serializer_method(serialized_data)
-
-            except ImportError:
-                return f"Error: Module '{module_path}' not found."
-            except AttributeError:
-                return f"Error: Attribute not found in the module or class."
-            except Exception as e:
-                return f"Error: {str(e)}"
-
-        return serialized_data
+            return serialized_data
+        except Exception as e:
+            logger.error(f"Error resolving business_data for task {self.id}: {e}", exc_info=True)
+            return self.data or {}
 
     def resolve_entity_string(self, info):
-        return self.entity.__str__()
+        try:
+            if self.entity:
+                return str(self.entity)
+            # Fallback si entity n'existe pas encore (ex: tâche créée avant l'objet)
+            if self.source and self.business_event:
+                return f"{self.source} - {self.business_event}"
+            return str(self.source) if self.source else "N/A"
+        except Exception:
+            # Fallback en cas d'erreur
+            return str(self.source) if self.source else "N/A"
 
     
     

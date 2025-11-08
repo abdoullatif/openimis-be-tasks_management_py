@@ -18,6 +18,11 @@ from tasks_management.apps import TasksManagementConfig
 class Query(graphene.ObjectType):
     module_name = "tasks_management"
 
+    available_task_sources = graphene.List(
+        graphene.String,
+        description="Liste toutes les sources de tâches disponibles (depuis TaskGroups et Task existantes)"
+    )
+
     task_group = OrderedDjangoFilterConnectionField(
         TaskGroupGQLType,
         orderBy=graphene.List(of_type=graphene.String),
@@ -182,6 +187,33 @@ class Query(graphene.ObjectType):
         Query._check_permissions(info.context.user, TasksManagementConfig.gql_task_group_search_perms)
         query = TaskExecutor.objects.filter(*filters)
         return gql_optimizer.query(query, info)
+
+    def resolve_available_task_sources(self, info):
+        """Résout toutes les sources de tâches disponibles"""
+        sources = set()
+        
+        # Sources depuis les TaskGroups existants
+        task_groups = TaskGroup.objects.filter(is_deleted=False)
+        for tg in task_groups:
+            if tg.json_ext and 'task_sources' in tg.json_ext:
+                sources.update(tg.json_ext['task_sources'])
+        
+        # Sources depuis les Task créées
+        task_sources = Task.objects.filter(is_deleted=False).values_list('source', flat=True).distinct()
+        sources.update([s for s in task_sources if s])
+        
+        # Sources connues du système (incluant payment_plan même si pas encore utilisé)
+        known_sources = [
+            "payment_plan",  # Pour PaymentPlan validation
+            "payroll",
+            "payroll_reconciliation",
+            "payroll_reject",
+            "payroll_delete",
+            "benefit_delete",
+        ]
+        sources.update(known_sources)
+        
+        return sorted(list(sources))
 
     @staticmethod
     def _check_permissions(user, perms):
