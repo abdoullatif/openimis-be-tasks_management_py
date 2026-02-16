@@ -1,4 +1,5 @@
 from django.apps import AppConfig
+import os
 
 DEFAULT_CONFIG = {
     "gql_task_group_search_perms": ["190001"],
@@ -14,6 +15,7 @@ DEFAULT_CONFIG = {
     # To be used if task should use generic resolver
     "default_executor_event": "default",
     "task_user_approved": "APPROVED",
+    "send_email_on_task_create": True,
 }
 
 
@@ -32,6 +34,7 @@ class TasksManagementConfig(AppConfig):
     gql_task_search_all_perms = None
     default_executor_event = None
     task_user_approved = None
+    send_email_on_task_create = None
 
     def ready(self):
         from core.models import ModuleConfiguration
@@ -39,7 +42,13 @@ class TasksManagementConfig(AppConfig):
 
         cfg = ModuleConfiguration.get_or_default(self.name, DEFAULT_CONFIG)
         self.__load_config(cfg)
-        
+
+        # Surcharge éventuelle via variable d'environnement SEND_EMAIL_ON_TASK_CREATE
+        env_flag = os.environ.get("SEND_EMAIL_ON_TASK_CREATE")
+        if env_flag is not None:
+            value = env_flag.lower() in ("1", "true", "yes", "on")
+            setattr(TasksManagementConfig, "send_email_on_task_create", value)
+
         # Bind service signals
         bind_service_signals()
         
