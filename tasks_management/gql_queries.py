@@ -10,6 +10,7 @@ from core import ExtendedConnection, prefix_filterset
 from core.gql_queries import UserGQLType
 from tasks_management.apps import TasksManagementConfig
 from tasks_management.models import TaskGroup, TaskExecutor, Task
+from tasks_management.task_labels import source_label, type_label, entity_label
 
 logger = logging.getLogger(__name__)
 
@@ -40,10 +41,12 @@ def is_task_triage(user):
 """
 
 def is_task_triage(user):
-    return user.has_perms(TasksManagementConfig.gql_task_group_create_perms
-                          + TasksManagementConfig.gql_task_group_search_perms
-                          + TasksManagementConfig.gql_task_group_update_perms
-                          + TasksManagementConfig.gql_task_group_delete_perms)
+    return user.has_perms(
+        (TasksManagementConfig.gql_task_group_create_perms or [])
+        + (TasksManagementConfig.gql_task_group_search_perms or [])
+        + (TasksManagementConfig.gql_task_group_update_perms or [])
+        + (TasksManagementConfig.gql_task_group_delete_perms or [])
+    )
 
 
 
@@ -53,6 +56,9 @@ class TaskListGQLType(DjangoObjectType):
     uuid = graphene.String(source='uuid')
     business_data = graphene.JSONString()
     entity_string = graphene.String()
+    source_label = graphene.String()
+    type_label = graphene.String()
+    entity_label = graphene.String()
     executors_status = graphene.List(ExecutorStatusType)
 
     class Meta:
@@ -115,6 +121,15 @@ class TaskListGQLType(DjangoObjectType):
         except Exception:
             # Fallback en cas d'erreur
             return str(self.source) if self.source else "N/A"
+
+    def resolve_source_label(self, info):
+        return source_label(self.source)
+
+    def resolve_type_label(self, info):
+        return type_label(self.executor_action_event, self.business_event)
+
+    def resolve_entity_label(self, info):
+        return entity_label(self.source, self.business_event)
 
     def resolve_executors_status(self, info):
         """
@@ -241,6 +256,9 @@ class TaskGQLType(DjangoObjectType):
     uuid = graphene.String(source='uuid')
     business_data = graphene.JSONString()
     entity_string = graphene.String()
+    source_label = graphene.String()
+    type_label = graphene.String()
+    entity_label = graphene.String()
     entity_id = graphene.String()
     entity_type_id = graphene.Int()
 
@@ -313,6 +331,15 @@ class TaskGQLType(DjangoObjectType):
             # Fallback en cas d'erreur
             return str(self.source) if self.source else "N/A"
 
+    def resolve_source_label(self, info):
+        return source_label(self.source)
+
+    def resolve_type_label(self, info):
+        return type_label(self.executor_action_event, self.business_event)
+
+    def resolve_entity_label(self, info):
+        return entity_label(self.source, self.business_event)
+
     @classmethod
     def get_queryset(cls, queryset, info):
         user = info.context.user
@@ -328,6 +355,9 @@ class TaskHistoryGQLType(DjangoObjectType):
     uuid = graphene.String(source='uuid')
     business_data = graphene.JSONString()
     entity_string = graphene.String()
+    source_label = graphene.String()
+    type_label = graphene.String()
+    entity_label = graphene.String()
 
     class Meta:
         model = Task.history.model
@@ -391,6 +421,15 @@ class TaskHistoryGQLType(DjangoObjectType):
         except Exception:
             # Fallback en cas d'erreur
             return str(self.source) if self.source else "N/A"
+
+    def resolve_source_label(self, info):
+        return source_label(self.source)
+
+    def resolve_type_label(self, info):
+        return type_label(self.executor_action_event, self.business_event)
+
+    def resolve_entity_label(self, info):
+        return entity_label(self.source, self.business_event)
 
     
     

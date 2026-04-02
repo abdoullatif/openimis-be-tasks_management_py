@@ -7,6 +7,7 @@ from django.conf import settings
 
 from tasks_management.apps import TasksManagementConfig
 from tasks_management.models import Task
+from tasks_management.task_labels import source_label, entity_label
 
 logger = logging.getLogger(__name__)
 
@@ -82,10 +83,8 @@ def on_task_created_notify_executors(**kwargs):
             return
         print("[tasks_management] %d exécuteur(s) trouvé(s), envoi des emails..." % executors.count())
 
-        source = task.source or ""
-        entity_str = ""
-        if hasattr(task, "entity") and task.entity:
-            entity_str = str(task.entity)
+        source = source_label(task.source)
+        entity_str = entity_label(task.source, task.business_event)
         subject = f"Nouvelle tâche à valider : {source}"
         if entity_str:
             subject = f"{subject} - {entity_str[:50]}{'…' if len(entity_str) > 50 else ''}"
