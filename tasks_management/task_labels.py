@@ -3,13 +3,17 @@ import re
 
 SOURCE_LABELS = {
     "payroll": "Paie",
+    "payroll_reconciliation": "Réconciliation de paie",
     "payment_plan": "Plan de paiement",
     "beneficiaryservice": "Beneficiaire",
 }
 
 TYPE_LABELS = {
     "accept_payroll": "Validation de paie",
-    "payment_plan_create": "Creation du plan de paiement",
+    "payroll_reconciliation": "Clôture et validation réconciliation",
+    "payment_plan_create": "Création du plan de paiement",
+    "payment_plan_update": "Mise à jour du plan de paiement",
+    "payment_plan_delete": "Suppression du plan de paiement",
     "update": "Mise a jour",
     "create": "Creation",
     "delete": "Suppression",

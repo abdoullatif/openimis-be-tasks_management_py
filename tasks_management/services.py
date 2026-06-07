@@ -32,7 +32,10 @@ class TaskService(BaseService):
     @register_service_signal('task_service.create')
     def create(self, obj_data):
         source = obj_data.get('source')
-        task_group_query = TaskGroup.objects.filter(json_ext__contains={"task_sources": [source]})
+        task_group_query = TaskGroup.objects.filter(
+            is_deleted=False,
+            json_ext__contains={"task_sources": [source]},
+        )
         if task_group_query:
             obj_data = {**obj_data, "task_group": task_group_query.first(), "status": Task.Status.ACCEPTED}
         return super().create(obj_data)
