@@ -210,6 +210,7 @@ class Query(graphene.ObjectType):
             "payroll_reject",
             "payroll_delete",
             "benefit_delete",
+            "subvention_productif",  # Inclusion productive — validation présences / subvention
         ]
         sources.update(known_sources)
         

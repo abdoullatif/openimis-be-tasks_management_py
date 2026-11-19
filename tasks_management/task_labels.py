@@ -6,6 +6,8 @@ SOURCE_LABELS = {
     "payroll_reconciliation": "Réconciliation de paie",
     "payment_plan": "Plan de paiement",
     "beneficiaryservice": "Beneficiaire",
+    "subvention_productif": "Subvention productif",
+    "productive_inclusion": "Subvention productif",
 }
 
 TYPE_LABELS = {
@@ -14,6 +16,7 @@ TYPE_LABELS = {
     "payment_plan_create": "Création du plan de paiement",
     "payment_plan_update": "Mise à jour du plan de paiement",
     "payment_plan_delete": "Suppression du plan de paiement",
+    "subvention": "Validation des présences / subvention",
     "update": "Mise a jour",
     "create": "Creation",
     "delete": "Suppression",

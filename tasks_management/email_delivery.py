@@ -40,12 +40,17 @@ def get_user_display_name(user):
 
 
 def default_from_email():
-    default_from = getattr(
-        settings,
-        "DEFAULT_FROM_EMAIL",
-        getattr(settings, "EMAIL_HOST_USER", "noreply@openimis.local"),
-    )
-    return default_from or "noreply@openimis.local"
+    """
+    Prefer DEFAULT_FROM_EMAIL, but fall back when Django still has its
+    unused default webmaster@localhost (common if local_settings/base omit it).
+    """
+    configured = (getattr(settings, "DEFAULT_FROM_EMAIL", None) or "").strip()
+    host_user = (getattr(settings, "EMAIL_HOST_USER", None) or "").strip()
+    if configured and configured.lower() not in ("webmaster@localhost", "root@localhost"):
+        return configured
+    if host_user:
+        return host_user
+    return "noreply@openimis.local"
 
 
 def send_email_messages_sync(messages):
@@ -93,18 +98,34 @@ def schedule_task_emails(messages):
     Celery si broker disponible (et pas en mode eager), sinon thread daemon.
     """
     if not messages or not is_task_email_enabled():
+        logger.info("Task emails skipped (disabled or empty). enabled=%s count=%s",
+                    is_task_email_enabled(), len(messages or []))
         return
+
+    # Force a usable From on each message (avoid webmaster@localhost on SMTP).
+    from_email = default_from_email()
+    for item in messages:
+        item.setdefault("from_email", from_email)
 
     if getattr(settings, "CELERY_TASK_ALWAYS_EAGER", False):
         _dispatch_in_background_thread(messages)
-        logger.debug("Scheduled %d task email(s) via background thread (CELERY_TASK_ALWAYS_EAGER).", len(messages))
+        logger.info(
+            "Scheduled %d task email(s) via background thread (CELERY_TASK_ALWAYS_EAGER). from=%s",
+            len(messages),
+            from_email,
+        )
         return
 
     try:
         from tasks_management.tasks import send_task_notification_emails_task
 
         send_task_notification_emails_task.delay(messages)
-        logger.debug("Scheduled %d task email(s) via Celery.", len(messages))
+        logger.info(
+            "Scheduled %d task email(s) via Celery. from=%s recipients=%s",
+            len(messages),
+            from_email,
+            [m.get("recipient_list") for m in messages],
+        )
     except Exception as exc:
         logger.warning(
             "Celery unavailable for task emails (%s), falling back to background thread.",

@@ -85,6 +85,13 @@ def notify_other_executors_on_validation(**kwargs):
                 recipients.append(recipient_email)
 
         if not recipients:
+            logger.warning(
+                "Task %s: validation email skipped — no other executor with email "
+                "(action_user=%s, executors=%s).",
+                task_id,
+                action_user_id,
+                executors.count(),
+            )
             return
 
         source = source_label(task.source)
